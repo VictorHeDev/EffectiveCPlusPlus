@@ -71,3 +71,75 @@ One of the fundamental ways to improve a C++ program's performance is to pass ob
 - physical constness - believes a member function is const if and only if it doesn't modify any of the object's data members (excluding those that are static) aka if it doesn't modify any of the bits inside the object. It's easy to detect violations; the compilers just look for assignments to data members.
 
 ## Item 4: Make sure that objects are initialized before they're used
+
+Reading uninitialized values yields undefined behavior. The best way to deal with this is to **always** initialize your objects before you use them. For non-member objects of built-in types, you'll need to do this manually.
+
+```cpp
+int x = 0;    // manual initialization of an int
+const char* text = "A C-style string";  // manual initialization of a pointer
+double d;     // "initialization" by reading from an input stream
+std::cin >> d;
+```
+
+For almost everything else, the responsibility for initialization falls on the constructors. Make sure all constructors initialize everything in the object. An important distinction is that assignment != initialization.
+
+```cpp
+class PhoneNumber {
+  // ...
+};
+
+class ABEntry { // ABEntry = "Address Book Entry"
+  public:
+    ABEntry(const std::string& name, const std::string& address, const std::list<PhoneNumber>&phones);
+  private:
+    std::string theName;
+    std::string theAddress;
+    std::list<PhoneNumber> thePhones;
+    int numTimesConsulted;
+};
+
+ABEntry::ABEntry(const std::string& name, const std::string& address, const std::list<PhoneNumber>& phones) {
+  theName = name;   // these are all assignments, not initializations
+  theAddress = address;
+  thePhones = phones;
+  numTimesConsulted = 0;
+}
+
+ABEntry::ABEntry(const std::string& name, const std::string& address, const std::list<PhoneNumber>& phones)
+:
+  theName(name),   // these are all initializations
+  theAddress(address),
+  thePhones(phones),
+  numTimesConsulted(0)
+{
+  // ctor (constructor) body is now empty (good!)
+}
+```
+
+Ordering for initializing members in the initialization list MATTERS.
+
+#### Order of initialization of non-local static objects defined in different translation units
+
+`static object` - one that exists from the time it's constructed until the end of hte program. Static objects inside functions are known as **local static objects** because they're local to a function. The other kids of static objects are known as **non-local static objects**. Static objects are automatically destroyed when the program exits, i.e., their destructors are automatically called when `main` finishes executing.
+`translation unit` - is the source code giving rise to a single object file. It's basically a single source file plus all of its **#include** files
+
+The relative order of initialization of non-local static objects defined in different translations is undefined. How can we figure out the correct order? Well, it's almost impossible, but we can move each non-local static object into its own function, where it's declared `static` instead. These functions return references to the objects they contain, and Clients can call the functions instead of referring to the global objects. Looks like a Singleton pattern.
+
+```cpp
+class FileSystem { ... }; // as before
+FileSystem& tfs() {   // this replaces the tfs (the file system) object; it could be static in the FileSystem class
+  return fs;          // return a reference to it
+}
+
+class Directory { ... };  // as before
+Directory::Directory(params) {  // as before, except references to tfs are now to tfs()
+  std::size_t disks = tsf().numDisks();
+}
+
+Directory& tempDir() {  // this replaces the tempDir object; it could be static in the Directory class
+  static Directory td;  // define/initialize local static object
+  return td;            // return a reference to it
+}
+```
+
+The scheme is simple: define and initialize a local static object on line 1, return it on line 2.
